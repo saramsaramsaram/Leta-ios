@@ -71,15 +71,57 @@ class ChatRoomsViewModel: ObservableObject {
 
             let success = error == nil
             DispatchQueue.main.async {
-                if success {
-                    self.rooms.removeAll { $0.id == roomId }
-                }
+                if success { self.rooms.removeAll { $0.id == roomId } }
                 completion(success)
             }
         }.resume()
     }
 }
 
+struct RoomNavigationRow: View {
+    let room: ChatRoomResponse
+    @State private var isActive = false
+
+    var body: some View {
+        Button {
+            isActive = true
+        } label: {
+            ChatRoomCell(room: room)
+        }
+        .buttonStyle(.plain)
+        .background(
+            NavigationLink(destination: chatDestination, isActive: $isActive) {
+                EmptyView()
+            }
+            .hidden()
+        )
+    }
+
+    @ViewBuilder
+    private var chatDestination: some View {
+        if isActive {
+            let character = LetaCharacterResponse(
+                id: room.characterId,
+                name: room.characterName,
+                characterType: "PERSON",
+                title: "",
+                intro: "",
+                profileImageUrl: room.characterImageUrl,
+                bannerImageUrl: nil,
+                tags: [],
+                views: nil,
+                hexColor: nil,
+                prologue: nil,
+                creatorName: nil,
+                creatorHandle: nil,
+                creatorComment: nil,
+                subCharacters: nil,
+                lorebooks: nil
+            )
+            ChatRoomView(character: character, existingRoomId: room.id, preselectedPersonaId: room.personaId)
+        }
+    }
+}
 
 struct ChatRoomsView: View {
     @StateObject private var viewModel = ChatRoomsViewModel()
@@ -92,8 +134,7 @@ struct ChatRoomsView: View {
                 Color(red: 0.03, green: 0.03, blue: 0.05).ignoresSafeArea()
 
                 if viewModel.isLoading {
-                    ProgressView()
-                        .tint(.white)
+                    ProgressView().tint(.white)
                 } else if viewModel.rooms.isEmpty {
                     EmptyRoomsView()
                 } else {
@@ -114,16 +155,13 @@ struct ChatRoomsView: View {
         }
     }
 
-
     private var navBar: some View {
         HStack {
             Text("대화")
                 .font(.system(size: 20, weight: .bold))
                 .foregroundColor(.white)
             Spacer()
-            Button {
-                viewModel.fetchRooms()
-            } label: {
+            Button { viewModel.fetchRooms() } label: {
                 Image(systemName: "arrow.clockwise")
                     .font(.system(size: 17))
                     .foregroundColor(.white)
@@ -138,49 +176,23 @@ struct ChatRoomsView: View {
     private var roomList: some View {
         List {
             ForEach(viewModel.rooms) { room in
-                NavigationLink(destination: chatDestination(for: room)) {
-                    ChatRoomCell(room: room)
-                }
-                .listRowBackground(Color(red: 0.05, green: 0.05, blue: 0.08))
-                .listRowSeparatorTint(Color.white.opacity(0.06))
-                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                    Button(role: .destructive) {
-                        roomToDelete = room
-                        showDeleteAlert = true
-                    } label: {
-                        Label("삭제", systemImage: "trash")
+                RoomNavigationRow(room: room)
+                    .listRowBackground(Color(red: 0.05, green: 0.05, blue: 0.08))
+                    .listRowSeparatorTint(Color.white.opacity(0.06))
+                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            roomToDelete = room
+                            showDeleteAlert = true
+                        } label: {
+                            Label("삭제", systemImage: "trash")
+                        }
                     }
-                }
             }
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .padding(.top, 56)
-    }
-
-    @ViewBuilder
-    private func chatDestination(for room: ChatRoomResponse) -> some View {
-        // character 정보를 최소 구성으로 넘겨서 ChatRoomView 재활용
-        let character = LetaCharacterResponse(
-            id: room.characterId,
-            name: room.characterName,
-            characterType: "PERSON",
-            title: "",
-            intro: "",
-            profileImageUrl: room.characterImageUrl,
-            bannerImageUrl: nil,
-            tags: [],
-            views: nil,
-            hexColor: nil,
-            prologue: nil,
-            creatorName: nil,
-            creatorHandle: nil,
-            creatorComment: nil,
-            subCharacters: nil,
-            lorebooks: nil
-        )
-        ChatRoomView(character: character, existingRoomId: room.id, preselectedPersonaId: room.personaId)
     }
 }
 
@@ -193,10 +205,8 @@ struct ChatRoomCell: View {
                 if let urlStr = room.characterImageUrl, let url = URL(string: urlStr) {
                     AsyncImage(url: url) { phase in
                         switch phase {
-                        case .success(let img):
-                            img.resizable().scaledToFill()
-                        default:
-                            avatarPlaceholder
+                        case .success(let img): img.resizable().scaledToFill()
+                        default: avatarPlaceholder
                         }
                     }
                 } else {
@@ -252,13 +262,9 @@ struct ChatRoomCell: View {
     private func formatTime(_ isoString: String) -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = formatter.date(from: isoString) {
-            return relativeString(from: date)
-        }
+        if let date = formatter.date(from: isoString) { return relativeString(from: date) }
         formatter.formatOptions = [.withInternetDateTime]
-        if let date = formatter.date(from: isoString) {
-            return relativeString(from: date)
-        }
+        if let date = formatter.date(from: isoString) { return relativeString(from: date) }
         return ""
     }
 
@@ -270,7 +276,7 @@ struct ChatRoomCell: View {
         let days = Int(diff / 86400)
         if days < 7 { return "\(days)일 전" }
         let cal = Calendar.current
-        let comps = cal.dateComponents([.year, .month, .day], from: date)
+        let comps = cal.dateComponents([.month, .day], from: date)
         return "\(comps.month ?? 0)/\(comps.day ?? 0)"
     }
 }
