@@ -24,10 +24,7 @@ struct ContentView: View {
                         }
                         .tag(0)
                     
-                    Text("대화방 목록")
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(Color(red: 0.05, green: 0.05, blue: 0.07))
+                    ChatRoomsView()
                         .tabItem {
                             Image(systemName: "bubble.left.and.bubble.right.fill")
                             Text("대화")
