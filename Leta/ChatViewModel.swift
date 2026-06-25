@@ -115,15 +115,39 @@ class ChatViewModel: ObservableObject {
 
             do {
                 let history = try JSONDecoder().decode([HistoryMessage].self, from: data)
-                let converted = history.map { msg -> ChatMessage in
-                    let speaker = msg.role == "user" ? "USER" : "BOT_STREAM"
-                    return ChatMessage(speaker: speaker, message: msg.content, timestamp: Date())
+                let converted: [ChatMessage] = history.compactMap { msg in
+                    switch msg.role {
+                    case "user":
+                        if msg.content.hasPrefix("[") { return nil }
+                        return ChatMessage(speaker: "USER", message: msg.content, timestamp: Date())
+
+                    case "assistant":
+                        if msg.content.hasPrefix("[") {
+                            let converted = Self.prologueToAtFormat(msg.content)
+                            return ChatMessage(speaker: "BOT_STREAM", message: converted, timestamp: Date())
+                        }
+                        return ChatMessage(speaker: "BOT_STREAM", message: msg.content, timestamp: Date())
+
+                    default:
+                        return nil
+                    }
                 }
                 DispatchQueue.main.async { self.messages = converted }
             } catch {
                 print("⚠️ 히스토리 디코딩 에러: \(error)")
             }
         }.resume()
+    }
+
+    private static func prologueToAtFormat(_ content: String) -> String {
+        guard content.hasPrefix("["),
+              let closeBracket = content.firstIndex(of: "]") else {
+            return content
+        }
+        let speaker = String(content[content.index(after: content.startIndex)..<closeBracket])
+        let message = String(content[content.index(after: closeBracket)...]).trimmingCharacters(in: .whitespaces)
+        let atSpeaker = (speaker == "시스템" || speaker == "나레이션") ? "지문" : speaker
+        return "@\(atSpeaker): \"\(message)\""
     }
     
     func sendMessage(content: String) {
