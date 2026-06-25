@@ -29,6 +29,14 @@ class AppState: NSObject, ObservableObject {
         }
     }
     
+    func logout() {
+        KeychainManager.shared.delete(account: "accessToken")
+        DispatchQueue.main.async {
+            self.isAuthenticated = false
+            self.currentUser = nil
+        }
+    }
+    
     func triggerAppleLogin() {
         let provider = ASAuthorizationAppleIDProvider()
         let request = provider.createRequest()

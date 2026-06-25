@@ -41,10 +41,7 @@ struct ContentView: View {
                         }
                         .tag(2)
                     
-                    Text("마이페이지")
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(Color(red: 0.05, green: 0.05, blue: 0.07))
+                    MyPageView()
                         .tabItem {
                             Image(systemName: "person.fill")
                             Text("마이페이지")
