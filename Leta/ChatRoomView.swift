@@ -7,9 +7,13 @@ struct ChatRoomView: View {
     @State private var showPersonaSettings: Bool = false
     @Environment(\.dismiss) private var dismiss
     
-    init(character: LetaCharacterResponse) {
+    init(character: LetaCharacterResponse, existingRoomId: Int? = nil, preselectedPersonaId: Int? = nil) {
         self.character = character
-        self._viewModel = StateObject(wrappedValue: ChatViewModel(character: character))
+        self._viewModel = StateObject(wrappedValue: ChatViewModel(
+            character: character,
+            existingRoomId: existingRoomId,
+            preselectedPersonaId: preselectedPersonaId
+        ))
     }
     
     var body: some View {
