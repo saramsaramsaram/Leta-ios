@@ -150,6 +150,41 @@ class ChatViewModel: ObservableObject {
         return "@\(atSpeaker): \"\(message)\""
     }
     
+    private var typewriterTimer: Timer?
+    private var typewriterFullText: String = ""
+    private var typewriterIndex: Int = 0
+    private var typewriterMsgIndex: Int = 0
+
+    private func startTypewriter(fullText: String, at msgIndex: Int) {
+        typewriterTimer?.invalidate()
+        typewriterFullText = fullText
+        typewriterIndex = 0
+        typewriterMsgIndex = msgIndex
+
+        typewriterTimer = Timer.scheduledTimer(withTimeInterval: 0, repeats: true) { [weak self] timer in
+            guard let self = self else { timer.invalidate(); return }
+
+            let chars = Array(self.typewriterFullText)
+            guard self.typewriterIndex < chars.count else {
+                timer.invalidate()
+                DispatchQueue.main.async { self.isResponding = false }
+                return
+            }
+
+            let displayed = String(chars[0...self.typewriterIndex])
+            self.typewriterIndex += 1
+
+            DispatchQueue.main.async {
+                self.messages[self.typewriterMsgIndex] = ChatMessage(
+                    id: self.messages[self.typewriterMsgIndex].id,
+                    speaker: "BOT_STREAM",
+                    message: displayed,
+                    timestamp: self.messages[self.typewriterMsgIndex].timestamp
+                )
+            }
+        }
+    }
+
     func sendMessage(content: String) {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -194,8 +229,8 @@ class ChatViewModel: ObservableObject {
 
                 let sendReq = ChatSendRequest(content: trimmed)
                 guard let sendBody = try? JSONEncoder().encode(sendReq),
-                      var streamRequest = NetworkManager.shared.createRequest(
-                        urlPath: "/api/chat/room/\(roomId)/stream/send",
+                      let sendRequest = NetworkManager.shared.createRequest(
+                        urlPath: "/api/chat/room/\(roomId)/send",
                         method: "POST",
                         body: sendBody,
                         requireAuth: true
@@ -204,42 +239,25 @@ class ChatViewModel: ObservableObject {
                     return
                 }
 
-                streamRequest.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+                let (data, response) = try await URLSession.shared.data(for: sendRequest)
 
-                let (streamBytes, streamResponse) = try await URLSession.shared.bytes(for: streamRequest)
-                if let httpResponse = streamResponse as? HTTPURLResponse, httpResponse.statusCode == 401 {
-                    self.handleUnauthorized(context: "채팅 스트림", statusCode: 401)
+                if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 401 {
+                    self.handleUnauthorized(context: "채팅 전송", statusCode: 401)
                     return
                 }
 
-                for try await line in streamBytes.lines {
-                    let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if trimmedLine.isEmpty || trimmedLine == "[" || trimmedLine == "]" { continue }
+                struct ChatResponse: Decodable { let content: String }
+                let chatResponse = try JSONDecoder().decode(ChatResponse.self, from: data)
+                let fullText = chatResponse.content
 
-                    let token: String
-                    if trimmedLine.hasPrefix("data:") {
-                        let raw = trimmedLine.replacingOccurrences(of: "data:", with: "").trimmingCharacters(in: .whitespaces)
-                        if raw == "[DONE]" { break }
-                        token = raw
-                    } else {
-                        token = trimmedLine
-                    }
-
-                    await MainActor.run {
-                        let currentText = self.messages[botMsgIndex].message
-                        self.messages[botMsgIndex] = ChatMessage(
-                            id: self.messages[botMsgIndex].id,
-                            speaker: "BOT_STREAM",
-                            message: currentText + token,
-                            timestamp: self.messages[botMsgIndex].timestamp
-                        )
-                    }
+                await MainActor.run {
+                    self.startTypewriter(fullText: fullText, at: botMsgIndex)
                 }
-            } catch {
-                print("⚠️ [채팅] 스트리밍 통신 중 에러: \(error)")
-            }
 
-            await MainActor.run { self.isResponding = false }
+            } catch {
+                print("⚠️ [채팅] 메시지 전송 중 에러: \(error)")
+                await MainActor.run { self.isResponding = false }
+            }
         }
     }
 
